@@ -1,0 +1,23 @@
+{
+  "name": "headless-place-bot",
+  "version": "1.0.0",
+  "description": "Headless /r/place bot 2022",
+  "main": "index.js",
+  "author": "",
+  "license": "MIT",
+  "scripts": {
+    "start": "ts-node ./src/app.ts"
+  },
+  "devDependencies": {
+    "@types/node": "^17.0.23",
+    "ts-node": "^10.7.0",
+    "tslint": "^6.1.3",
+    "typescript": "^4.6.3"
+  },
+  "dependencies": {
+    "axios": "^0.26.1",
+    "form-data": "^4.0.0",
+    "get-pixels": "^3.3.3",
+    "ws": "^8.5.0"
+  }
+}
