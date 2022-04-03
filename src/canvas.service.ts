@@ -1,14 +1,14 @@
 import WebSocket from 'ws';
 import axios from "axios";
-import {Auth} from "./model/auth.model";
+import {Blueprint} from "./model/blueprint.model";
+import {Pixel} from "./model/pixel.model";
 
 const getPixels = require("get-pixels");
 
 export class CanvasService {
 
-    public static async getCurrentImageUrl(accessToken: string): Promise<any> {
+    public static async getCurrentImageUrl(accessToken: string, id: number = 0): Promise<string> {
         return new Promise((resolve, reject) => {
-            console.log('Create websocket...');
             const ws = new WebSocket('wss://gql-realtime-2.reddit.com/query', 'graphql-ws', {
                 headers : {
                     "User-Agent": "Mozilla/5.0 (X11; Linux x86_64; rv:98.0) Gecko/20100101 Firefox/98.0",
@@ -17,14 +17,12 @@ export class CanvasService {
             });
 
             ws.onopen = () => {
-                console.log('Init connection...');
                 ws.send(JSON.stringify({
                     'type': 'connection_init',
                     'payload': {
                         'Authorization': `Bearer ${accessToken}`
                     }
                 }));
-                console.log('Request canvas...');
                 ws.send(JSON.stringify({
                     'id': '1',
                     'type': 'start',
@@ -34,7 +32,7 @@ export class CanvasService {
                                 'channel': {
                                     'teamOwner': 'AFD2022',
                                     'category': 'CANVAS',
-                                    'tag': '0'
+                                    'tag': id+""
                                 }
                             }
                         },
@@ -80,19 +78,51 @@ export class CanvasService {
 
     public static async getMapFromUrl(url) {
         return new Promise((resolve, reject) => {
-            getPixels(url, function(err, pixels) {
-                if(err) {
-                    console.log("Bad image path");
-                    reject(err);
+            getPixels(url, function(error, pixels) {
+                if(error) {
+                    reject(error);
                     return;
                 }
-                console.log("got pixels", pixels.shape.slice());
                 resolve(pixels);
             })
         });
     }
 
-    public static async place(accessToken: string, auth: Auth, x: number, y: number, color) {
+    public static async getCanvasSubset(accessToken: string, x: number, y: number, w: number, h: number): Promise<Pixel[]> {
+        const canvasUrl: string = await this.getCurrentImageUrl(accessToken);
+        const canvas2Url: string = await this.getCurrentImageUrl(accessToken, 1);
+        const canvas: Blueprint = new Blueprint();
+        await canvas.load(canvasUrl);
+        const canvas2: Blueprint = new Blueprint();
+        await canvas2.load(canvas2Url);
+
+        const totalWidth: number = canvas.width + canvas2.width;
+
+        let canvasPixels: Pixel[][] = [];
+
+        let outPixels: Pixel[] = [];
+
+        for (let cY = 0; cY < canvas.height; cY++) {
+            let row: Pixel[] = [];
+            for (let cX = 0; cX < canvas.width; cX++) {
+                row.push(canvas.pixels[cX + cY*canvas.width]);
+            }
+            for (let cX = 0; cX < canvas2.width; cX++) {
+                row.push(canvas2.pixels[cX + cY*canvas2.width]);
+            }
+            canvasPixels.push(row);
+        }
+
+        for (let cY = y; cY < y+h; cY++) {
+            for (let cX = x; cX < x+w; cX++) {
+                outPixels.push(canvasPixels[cY][cX]);
+            }
+        }
+
+        return outPixels;
+    }
+
+    public static async place(accessToken: string, x: number, y: number, color): Promise<number> {
 
         const body: any = {
             'operationName': 'setPixel',
@@ -101,11 +131,11 @@ export class CanvasService {
                     'actionName': 'r/replace:set_pixel',
                     'PixelMessageData': {
                         'coordinate': {
-                            'x': x,
-                            'y': y
+                            'x': x % 1000,
+                            'y': y % 1000
                         },
                         'colorIndex': color,
-                        'canvasIndex': 0
+                        'canvasIndex': (x > 999 ? 1 : 0)
                     }
                 }
             },
@@ -140,8 +170,6 @@ export class CanvasService {
             body,
             {
                 headers: {
-                    // cookie: auth.cookie,
-                    // 'x-modhash': auth.modhash,
                     'origin': 'https://hot-potato.reddit.com',
                     'referer': 'https://hot-potato.reddit.com/',
                     'apollographql-client-name': 'mona-lisa',
@@ -152,8 +180,7 @@ export class CanvasService {
         );
         const data = await response.data;
         if (data.errors != undefined) {
-            console.log('Fehler beim Platzieren des Pixels, warte auf Abkühlzeit...');
-            console.log(data.errors);
+            console.log('Fehler beim Platzieren des Pixels, warte auf Abklingzeit...');
             return data.errors[0].extensions?.nextAvailablePixelTs;
         }
         return data?.data?.act?.data?.[0]?.data?.nextAvailablePixelTimestamp;

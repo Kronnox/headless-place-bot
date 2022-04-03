@@ -1,9 +1,9 @@
 {
   "name": "headless-place-bot",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Headless /r/place bot 2022",
   "main": "index.js",
-  "author": "",
+  "author": "Kronox, Cube-Nation.de",
   "license": "MIT",
   "scripts": {
     "start": "ts-node ./src/app.ts"
