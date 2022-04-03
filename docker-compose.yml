@@ -1,0 +1,4 @@
+version: "3.9"
+services:
+  headless-place-bot:
+    image: "ghcr.io/kronnox/headless-place-bot:latest"

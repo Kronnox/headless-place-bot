@@ -1,3 +1,7 @@
 .idea/
+
 node_modules/
+dist/
+
 accounts.json
+accounts.full.json

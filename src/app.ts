@@ -13,7 +13,7 @@ class App {
     private VERSION: number = 1;
 
     public async main(): Promise<void> {
-        this.ccConnection = new WebSocket('wss://socketsbay.com/wss/v2/2/demo/')
+        this.ccConnection = new WebSocket('wss://placede.ml')
 
         const mainClass = this;
         this.ccConnection.onopen = function () {
@@ -22,7 +22,7 @@ class App {
         };
 
         this.ccConnection.onerror = function (error) {
-            Logger.log('WebSocket Error: '+ error.message);
+            Logger.log('WebSocket Error: '+ error.message, LogLevel.VERBOSE);
         };
 
         this.ccConnection.onmessage  = function (message) {
@@ -50,6 +50,7 @@ class App {
             messageData = JSON.parse(message.data);
         } catch {
             // Ignore malformed messages
+            Logger.log("Malformed message", LogLevel.VERBOSE);
             return;
         }
         switch (messageData.operation) {
@@ -65,7 +66,7 @@ class App {
     private async processOperationPlacePixel(data): Promise<void> {
         const x = data.x;
         const y = data.y;
-        const color = data.color;
+        const color = data.color_index;
 
         const time = new Date().getTime();
         // TODO: accounts
