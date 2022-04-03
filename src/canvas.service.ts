@@ -2,6 +2,7 @@ import WebSocket from 'ws';
 import axios from "axios";
 import {Blueprint} from "./model/blueprint.model";
 import {Pixel} from "./model/pixel.model";
+import {Logger, LogLevel, LogType} from "./util/logger.util";
 
 const getPixels = require("get-pixels");
 
@@ -180,7 +181,8 @@ export class CanvasService {
         );
         const data = await response.data;
         if (data.errors != undefined) {
-            console.log('Fehler beim Platzieren des Pixels, warte auf Abklingzeit...');
+            Logger.log('Painting pixel failed! Waiting for cooldown...', LogLevel.WARNING, LogType.PAINTER);
+            console.log(data.error);
             return data.errors[0].extensions?.nextAvailablePixelTs;
         }
         return data?.data?.act?.data?.[0]?.data?.nextAvailablePixelTimestamp;

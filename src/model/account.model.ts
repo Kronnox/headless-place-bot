@@ -1,20 +1,21 @@
 import {AuthDetails} from "./auth-details.model";
 import FormData from "form-data";
 import axios from "axios";
+import {Logger, LogLevel, LogType} from "../util/logger.util";
 
 export class Account {
 
-    private name: string;
+    private _name: string;
 
     private _authDetails: AuthDetails;
     private _authenticated: boolean = false;
 
     constructor(name: string) {
-        this.name = name;
+        this._name = name;
     }
 
     public async login(name: string, password: string): Promise<AuthDetails> {
-        console.log(`Logging in ${name}...`);
+        Logger.log(`Logging in ${name}...`, LogLevel.INFO, LogType.ACCOUNTS);
 
         const data = new FormData();
         data.append('op', 'login');
@@ -28,17 +29,24 @@ export class Account {
             const modhash = response.data.json.data.modhash;
             const cookie = response.headers['set-cookie'].map((c) => c.split(';')[0]).join('; ');
             this._authDetails = new AuthDetails(cookie, modhash);
+
+            await this.authDetails.updateAccessToken();
+
             this._authenticated = true;
         } else {
             const msg = response.data.json.errors[0][0];
             if (msg === 'INCORRECT_USERNAME_PASSWORD') {
-                console.log(`Invalid user name or password for ${name}`);
+                Logger.log(`Invalid user name or password for ${name}`, LogLevel.WARNING, LogType.ACCOUNTS);
             } else {
-                console.log(`Error: ${response.data.json}`);
+                Logger.log(`Error: ${response.data.json}`, LogLevel.VERBOSE, LogType.ACCOUNTS);
             }
         }
 
         return undefined;
+    }
+
+    get name(): string {
+        return this._name;
     }
 
     get authDetails(): AuthDetails {

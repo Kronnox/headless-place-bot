@@ -4,6 +4,7 @@ import accountsJson from '../accounts.json';
 import {Blueprint} from "./model/blueprint.model";
 import {Pixel} from "./model/pixel.model";
 import {COLOR_MAPPINGS} from "../colors.config";
+import {Logger, LogLevel, LogType} from "./util/logger.util";
 
 class App {
 
@@ -34,7 +35,7 @@ class App {
         await account.authDetails.updateAccessToken();
         const authToken: string = account.authDetails.accessToken;
 
-        const x: number = 1167;
+        const x: number = 1439;
         const y: number = 291;
         const canvasPixels: Pixel[] = await CanvasService.getCanvasSubset(authToken, x, y, this.target.width, this.target.height);
 
@@ -45,9 +46,10 @@ class App {
 
             const cX: number = x + pixel % this.target.width;
             const cY: number = y + Math.round(pixel / this.target.width);
-            const color: number = COLOR_MAPPINGS[this.target.pixels[pixel].getHex()];
+            const hexColor: string = this.target.pixels[pixel].getHex();
+            const color: number = COLOR_MAPPINGS[hexColor];
 
-            console.log(cX+" "+cY+" "+color);
+            Logger.log(`Painting pixel at x:${cX} y:${cY} in ${hexColor}`, LogLevel.INFO, LogType.PAINTER);
             await this.paint(accountId, cX, cY, color);
             break;
         }
@@ -56,11 +58,10 @@ class App {
     private async paint(accountId: number, x: number, y: number, color: number): Promise<void> {
         const account: Account = this.accounts[accountId];
 
-        await account.authDetails.updateAccessToken();
         const authToken: string = account.authDetails.accessToken;
         // const currentCanvasUrl = await CanvasService.getCurrentImageUrl(authToken);
         // const pixels = await CanvasService.getMapFromUrl(currentCanvasUrl);
-        console.log('Painting...')
+        Logger.log('Painting...', LogLevel.INFO, LogType.PAINTER);
         CanvasService.place(authToken, x, y, color)
             .then(r => this.schedulePaint(accountId, r))
             .catch(r => this.schedulePaint(accountId, r));
@@ -68,7 +69,13 @@ class App {
 
     private async schedulePaint(accountId: number, timestamp: number): Promise<void> {
         const remainingMs: number = timestamp - Date.now();
-        console.log(`Scheduled paint for ${new Date(timestamp).toTimeString()}`);
+
+        if (remainingMs > 2147483647) {
+            Logger.log(`Cooldown on ${this.accounts[accountId].name} is over 2147483647: Schedule in 5min`, LogLevel.VERBOSE, LogType.PAINTER);
+            timestamp = new Date(Date.now() + 5*60*1000).valueOf();
+        }
+
+        Logger.log(`Scheduled paint for ${new Date(timestamp).toTimeString()}`, LogLevel.INFO, LogType.PAINTER);
         setTimeout(() => this.tryPaint(accountId), remainingMs + 10);
     }
 }
