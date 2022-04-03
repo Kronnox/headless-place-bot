@@ -1,20 +1,33 @@
-import {CanvasService} from "./canvas.service";
+import {CanvasHelper} from "./canvas.helper";
 import {Account} from "./model/account.model";
 import accountsJson from '../accounts.json';
-import {Blueprint} from "./model/blueprint.model";
-import {Pixel} from "./model/pixel.model";
-import {COLOR_MAPPINGS} from "../colors.config";
 import {Logger, LogLevel, LogType} from "./util/logger.util";
+import WebSocket from 'ws';
 
 class App {
 
     private accountInfos = accountsJson.accounts
     private accounts: Account[] = [];
 
-    private target: Blueprint = new Blueprint();
+    private ccConnection: WebSocket;
+    private VERSION: number = 1;
 
     public async main(): Promise<void> {
-        await this.target.load('https://veni.vidi.vodka/index.php/s/grtzcSXMqHe9L7r/preview');
+        this.ccConnection = new WebSocket('wss://socketsbay.com/wss/v2/2/demo/')
+
+        const mainClass = this;
+        this.ccConnection.onopen = function () {
+            Logger.log("WebSocket connection established!");
+            mainClass.ccConnection.send(JSON.stringify({ "platform": "nodejs", "version": mainClass.VERSION }));
+        };
+
+        this.ccConnection.onerror = function (error) {
+            Logger.log('WebSocket Error: '+ error.message);
+        };
+
+        this.ccConnection.onmessage  = function (message) {
+            mainClass.processOperation(message);
+        };
 
         for (let name of Object.keys(this.accountInfos)) {
             const account: Account = new Account(name);
@@ -25,61 +38,60 @@ class App {
         await new Promise(r => setTimeout(r, 500));
 
         for (let accountId = 0; accountId < this.accounts.length; accountId++) {
-            await this.tryPaint(accountId);
+            // await this.tryPaint(accountId);
+            this.ccConnection.send("request_pixel");
         }
     }
 
-    private async tryPaint(accountId: number) {
-        const account: Account = this.accounts[accountId];
-
-        await account.authDetails.updateAccessToken();
-        const authToken: string = account.authDetails.accessToken;
-
-        const x: number = 1439;
-        const y: number = 291;
-        const canvasPixels: Pixel[] = await CanvasService.getCanvasSubset(authToken, x, y, this.target.width, this.target.height);
-
-        for (let pixel = 0; pixel < this.target.pixels.length; pixel++) {
-            const h1 = this.target.pixels[pixel].getHex();
-            const h2 = canvasPixels[pixel].getHex();
-            if (h1 == h2) continue;
-
-            const cX: number = x + pixel % this.target.width;
-            const cY: number = y + Math.round(pixel / this.target.width);
-            const hexColor: string = this.target.pixels[pixel].getHex();
-            const color: number = COLOR_MAPPINGS[hexColor];
-
-            Logger.log(`Painting pixel at x:${cX} y:${cY} in ${hexColor}`, LogLevel.INFO, LogType.PAINTER);
-            await this.paint(accountId, cX, cY, color);
-            break;
+    private processOperation(message): void {
+        console.log('WebSocket Message received: '+message.data);
+        let messageData;
+        try {
+            messageData = JSON.parse(message.data);
+        } catch {
+            // Ignore malformed messages
+            return;
+        }
+        switch (messageData.operation) {
+            case 'place-pixel':
+                void this.processOperationPlacePixel(messageData.data);
+                return;
+            case 'notify-update':
+                void this.processOperationNotifyUpdate(messageData.data);
+                return;
         }
     }
 
-    private async paint(accountId: number, x: number, y: number, color: number): Promise<void> {
-        const account: Account = this.accounts[accountId];
+    private async processOperationPlacePixel(data): Promise<void> {
+        const x = data.x;
+        const y = data.y;
+        const color = data.color;
 
-        const authToken: string = account.authDetails.accessToken;
-        // const currentCanvasUrl = await CanvasService.getCurrentImageUrl(authToken);
-        // const pixels = await CanvasService.getMapFromUrl(currentCanvasUrl);
-        Logger.log('Painting...', LogLevel.INFO, LogType.PAINTER);
-        CanvasService.place(authToken, x, y, color)
-            .then(r => this.schedulePaint(accountId, r))
-            .catch(r => this.schedulePaint(accountId, r));
-    }
+        const time = new Date().getTime();
+        // TODO: accounts
+        let nextAvailablePixelTimestamp: number = await CanvasHelper.place(this.accounts[0].authDetails.accessToken, x, y, color) ?? new Date(time + 1000 * 60 * 5 + 1000 * 15).valueOf();
 
-    private async schedulePaint(accountId: number, timestamp: number): Promise<void> {
-        const remainingMs: number = timestamp - Date.now();
-
-        if (remainingMs > 2147483647) {
-            Logger.log(`Cooldown on ${this.accounts[accountId].name} is over 2147483647: Schedule in 5min`, LogLevel.VERBOSE, LogType.PAINTER);
-            timestamp = new Date(Date.now() + 5*60*1000).valueOf();
+        // Sanity check timestamp
+        if (nextAvailablePixelTimestamp < time || nextAvailablePixelTimestamp > time + 1000 * 60 * 5 + 1000 * 15) {
+            nextAvailablePixelTimestamp = time + 1000 * 60 * 5 + 1000 * 15;
         }
 
-        Logger.log(`Scheduled paint for ${new Date(timestamp).toTimeString()}`, LogLevel.INFO, LogType.PAINTER);
-        setTimeout(() => this.tryPaint(accountId), remainingMs + 10);
+        // Add a few random seconds to the next available pixel timestamp
+        const waitFor = nextAvailablePixelTimestamp - time + (Math.random() * 1000 * 15);
+
+        const minutes = Math.floor(waitFor / (1000 * 60))
+        const seconds = Math.floor((waitFor / 1000) % 60)
+        Logger.log(`Warten auf Abklingzeit ${minutes}:${seconds} bis ${new Date(nextAvailablePixelTimestamp).toLocaleTimeString()}`)
+        setTimeout(this.setReady, waitFor);
+    }
+
+    private async processOperationNotifyUpdate(data): Promise<void> {
+        Logger.log(`Neue Version verfügbar! Aktulaisiere unter TBD`, LogLevel.WARNING, LogType.PAINTER)
+    }
+
+    private setReady(): void {
+        this.ccConnection.send("request_pixel");
     }
 }
 
-new App().main()
-    .then(r => console.log(r))
-    .catch(r => console.log(r));
+new App().main().catch(r => console.log(r));

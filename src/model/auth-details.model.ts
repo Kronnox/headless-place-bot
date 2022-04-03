@@ -13,8 +13,6 @@ export class AuthDetails {
     }
 
     public async updateAccessToken(): Promise<void> {
-        //const usingOldReddit = window.location.href.includes('new.reddit.com');
-        //const url = usingOldReddit ? 'https://new.reddit.com/r/place/' : 'https://www.reddit.com/r/place/';
         const response = await axios.get('https://new.reddit.com/r/place/', { headers: {cookie: this._cookie, 'x-modhash': this._modhash,}});
         const responseText = await response.data;
 
